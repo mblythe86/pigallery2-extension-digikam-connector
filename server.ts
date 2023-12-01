@@ -130,7 +130,7 @@ export type dbTypes = 'MySQL' | 'SQLite'
 // Using https://github.com/bpatrik/typeconfig for configuration
 @SubConfigClass({ softReadonly: true })
 export class DigikamGasketConfig {
-  @ConfigProperty({ description: 'DigiKam Collection' })// FIXME: improve description
+  @ConfigProperty({ description: 'DigiKam Directory Category' })
     digikamShowCollection: string = 'Public'
 
   @ConfigProperty({ description: 'DigiKam Database Type (MySQL or SQLite)' })

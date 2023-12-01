@@ -159,8 +159,7 @@ let DigikamGasketConfig = class DigikamGasketConfig {
     }
 };
 tslib_1.__decorate([
-    (0, ConfigPropoerty_1.ConfigProperty)({ description: 'DigiKam Collection' }) // FIXME: improve description
-    ,
+    (0, ConfigPropoerty_1.ConfigProperty)({ description: 'DigiKam Directory Category' }),
     tslib_1.__metadata("design:type", String)
 ], DigikamGasketConfig.prototype, "digikamShowCollection", void 0);
 tslib_1.__decorate([
