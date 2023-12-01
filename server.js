@@ -3,12 +3,61 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.cleanUp = exports.init = exports.DigikamGasketConfig = exports.Image = exports.Album = void 0;
 const tslib_1 = require("tslib");
+const Config_1 = require("./node_modules/pigallery2-extension-kit/lib/common/config/private/Config");
+const PrivateConfig_1 = require("./node_modules/pigallery2-extension-kit/lib/common/config/private/PrivateConfig");
 // Importing packages that are available in the main app (listed in the packages.json in pigallery2)
 const typeorm_1 = require("typeorm");
 const SubConfigClass_1 = require("typeconfig/src/decorators/class/SubConfigClass");
 const ConfigPropoerty_1 = require("typeconfig/src/decorators/property/ConfigPropoerty");
 const path = require("path");
 const util = require("util");
+const forcedDebug = process.env.NODE_ENV === 'debug';
+const extensionLog = (() => {
+    let realLog = null;
+    return {
+        setup: (extension) => {
+            if (realLog == null) {
+                realLog = extension.Logger;
+            }
+        },
+        silly: (func) => {
+            if (!forcedDebug && Config_1.Config.Server.Log.level < PrivateConfig_1.LogLevel.silly) {
+                return;
+            }
+            realLog.silly(func());
+        },
+        debug: (func) => {
+            if (!forcedDebug && Config_1.Config.Server.Log.level < PrivateConfig_1.LogLevel.debug) {
+                return;
+            }
+            realLog.debug(func());
+        },
+        verbose: (func) => {
+            if (!forcedDebug && Config_1.Config.Server.Log.level < PrivateConfig_1.LogLevel.verbose) {
+                return;
+            }
+            realLog.verbose(func());
+        },
+        info: (func) => {
+            if (!forcedDebug && Config_1.Config.Server.Log.level < PrivateConfig_1.LogLevel.info) {
+                return;
+            }
+            realLog.info(func());
+        },
+        warn: (func) => {
+            if (!forcedDebug && Config_1.Config.Server.Log.level < PrivateConfig_1.LogLevel.warn) {
+                return;
+            }
+            realLog.warn(func());
+        },
+        error: (func) => {
+            if (!forcedDebug && Config_1.Config.Server.Log.level < PrivateConfig_1.LogLevel.error) {
+                return;
+            }
+            realLog.error(func());
+        }
+    };
+})();
 // https://github.com/typeorm/typeorm/blob/master/docs/entities.md#what-is-entity
 let Album = class Album {
 };
@@ -146,70 +195,97 @@ DigikamGasketConfig = tslib_1.__decorate([
     (0, SubConfigClass_1.SubConfigClass)({ softReadonly: true })
 ], DigikamGasketConfig);
 exports.DigikamGasketConfig = DigikamGasketConfig;
+/**
+ * Set up DigiKam DB connection
+ */
+const digikamDB = (() => {
+    let instance = null;
+    const createInstance = async (extension) => {
+        const commonOpts = {
+            entities: [Album, Image],
+            logging: (forcedDebug || Config_1.Config.Server.Log.level >= PrivateConfig_1.LogLevel.debug)
+        };
+        const dbOpts = (() => {
+            switch (extension.config.getConfig().digikamDbType) {
+                case 'MySQL': return {
+                    type: 'mysql',
+                    host: extension.config.getConfig().digikamMysqlHost,
+                    port: extension.config.getConfig().digikamMysqlPort,
+                    database: extension.config.getConfig().digikamMysqlDb,
+                    username: extension.config.getConfig().digikamMysqlUser,
+                    password: extension.config.getConfig().digikamMysqlPassword
+                };
+                case 'SQLite': return {
+                    type: 'better-sqlite3',
+                    database: extension.config.getConfig().digikamSqliteDb
+                };
+                // FIXME: error out otherwise
+            }
+        })();
+        const fullOpts = { ...commonOpts, ...dbOpts };
+        const DigikamDataSource = new typeorm_1.DataSource(fullOpts);
+        try {
+            await DigikamDataSource.initialize();
+            extensionLog.verbose(() => 'DigiKam Connector has successfully connected to the DigiKam DB');
+        }
+        catch (err) {
+            extensionLog.error(() => `DigiKam Connector encountered an error when connecting to the DigiKam DB: ${err}`);
+        }
+        return DigikamDataSource;
+    };
+    return {
+        getDataSource: async (extension) => {
+            if (instance == null) {
+                instance = await createInstance(extension);
+            }
+            return instance;
+        },
+        cleanUp: async () => {
+            if (instance != null) {
+                await instance.destroy();
+                instance = null;
+            }
+        }
+    };
+})();
 const init = async (extension) => {
-    extension.Logger.debug(`My extension is setting up. name: ${extension.extensionName}, id: ${extension.extensionId}`);
+    extensionLog.setup(extension);
+    extensionLog.info(() => `My extension is setting up. name: ${extension.extensionName}, id: ${extension.extensionId}`);
     /**
      * (Optional) Setting the configuration template
      */
     extension.config.setTemplate(DigikamGasketConfig);
     /**
-     * Set up DigiKam DB connection
-     */
-    const opts = (extension.config.getConfig().digikamDbType === 'MySQL')
-        ? {
-            type: 'mysql',
-            host: extension.config.getConfig().digikamMysqlHost,
-            port: extension.config.getConfig().digikamMysqlPort,
-            database: extension.config.getConfig().digikamMysqlDb,
-            username: extension.config.getConfig().digikamMysqlUser,
-            password: extension.config.getConfig().digikamMysqlPassword,
-            entities: [Album, Image],
-            logging: true
-        }
-        : {
-            type: 'better-sqlite3',
-            database: extension.config.getConfig().digikamSqliteDb,
-            entities: [Album, Image]
-        };
-    const DigikamDataSource = new typeorm_1.DataSource(opts);
-    DigikamDataSource.initialize()
-        .then(async () => {
-        extension.Logger.debug('My extension has successfully connected to the DigiKam DB');
-        // const albums = DigikamDataSource.getRepository(Album)
-        // const publicAlbums = await albums.findBy({ collection: extension.config.getConfig().digikamShowCollection })
-        // extension.Logger.silly('public albums: ', JSON.stringify(publicAlbums, undefined, 2))
-    })
-        .catch((err) => {
-        extension.Logger.debug(`My extension encountered an error when connecting to the DigiKam DB: ${err}`);
-    });
-    /**
      * Only index directories tagged with the right collection
      */
-    const baseQuery = () => {
-        const query = DigikamDataSource.getRepository(Album)
+    const baseQuery = async () => {
+        const ds = await digikamDB.getDataSource(extension);
+        const query = ds.getRepository(Album)
             .createQueryBuilder('album')
             .where('album.collection = :collection', { collection: extension.config.getConfig().digikamShowCollection });
         return query;
     };
     const indexDir = async (dir) => {
-        extension.Logger.silly(`indexDir:${dir}`);
+        extensionLog.silly(() => `indexDir:${dir}`);
         // https://github.com/typeorm/typeorm/blob/master/docs/select-query-builder.md#adding-where-expression
-        const count = await baseQuery()
+        const q = await baseQuery();
+        const count = await q
             .andWhere(new typeorm_1.Brackets((qb) => {
             qb.where('album.relativePath = :dir', { dir })
                 .orWhere('album.relativePath LIKE :path', { path: `${dir}/%` });
         }))
             .getCount();
-        extension.Logger.silly(`public album count:${count}`);
+        extensionLog.silly(() => `public album count:${count}`);
         return count > 0;
     };
     const showDirPics = async (dir) => {
-        extension.Logger.silly(`showDirPics:${dir}`);
+        extensionLog.silly(() => `showDirPics:${dir}`);
         // https://github.com/typeorm/typeorm/blob/master/docs/select-query-builder.md#adding-where-expression
-        const count = await baseQuery()
+        const q = await baseQuery();
+        const count = await q
             .andWhere('album.relativePath = :dir', { dir })
             .getCount();
-        extension.Logger.silly(`public album count:${count}`);
+        extensionLog.silly(() => `public album count:${count}`);
         return count > 0;
     };
     // https://advancedweb.hu/how-to-use-async-functions-with-array-filter-in-javascript/
@@ -219,17 +295,18 @@ const init = async (extension) => {
     };
     extension.events.gallery.DiskManager
         .scanDirectory.after(async (output) => {
-        // extension.Logger.silly('scanDirectory.after: ', JSON.stringify(output, undefined, 2));
+        extensionLog.debug(() => `scanDirectory.after: output = ${util.inspect(output)}`);
         // FIXME: this would be better accomplished by having an extension hook into DiskManager.excludeDir, but this works.
         // https://www.aleksandrhovhannisyan.com/blog/async-functions-that-return-booleans/
         const dirs = await asyncFilter(output.directories, async (dir) => { const val = await indexDir(path.join(path.sep, dir.path, dir.name)); return val; });
         output.directories = dirs;
-        // don't show any photos in this directory if it's not the right collection
+        // Also, don't show any photos in this directory if it's not the right collection
         const showPics = await showDirPics(path.join(path.sep, output.path, output.name));
         if (!showPics) {
+            extensionLog.silly(() => 'Do not show pics in this directory!');
             output.media = [];
         }
-        // extension.Logger.silly('scanDirectory.after2: ', JSON.stringify(output, undefined, 2));
+        extensionLog.debug(() => `scanDirectory.after: altered output = ${util.inspect(output)}`);
         return output;
     });
     /**
@@ -237,19 +314,20 @@ const init = async (extension) => {
      * */
     extension.events.gallery.CoverManager
         .getCoverForDirectory.before(async (input, event) => {
-        extension.Logger.silly('getCoverForDirectory.before: ', JSON.stringify(input, undefined, 2));
+        extensionLog.debug(() => `getCoverForDirectory.before: input = ${util.inspect(input)}`);
         const inputQuery = input.inputs[0];
         const albumPath = (inputQuery.path === './')
             ? path.join(path.sep, inputQuery.name)
             : path.join(path.sep, inputQuery.path, inputQuery.name);
-        const albumInfo = await DigikamDataSource.getRepository(Album)
+        const ds = await digikamDB.getDataSource(extension);
+        const albumInfo = await ds.getRepository(Album)
             .createQueryBuilder('album')
             .leftJoinAndSelect('album.icon', 'icon')
             .leftJoinAndSelect('icon.album', 'iconalbum')
             .where('album.relativepath = :path', { path: albumPath })
             .limit(1)
             .getOne();
-        extension.Logger.silly('getCoverForDirectory.before2: ', JSON.stringify(albumInfo, undefined, 2));
+        extensionLog.debug(() => `getCoverForDirectory.before: albumInfo = ${util.inspect(albumInfo)}`);
         if (albumInfo.icon == null) {
             return input;
         }
@@ -262,26 +340,21 @@ const init = async (extension) => {
             .select(['media.name', 'media.id', 'directory.name', 'directory.path'])
             .where('media.name = :mediaName', { mediaName: albumInfo.icon.name })
             .andWhere('directory.name = :dirName', { dirName: path.basename(albumInfo.icon.album.relativePath) })
-            .andWhere('directory.path = :dirPath', { dirPath: path.join(path.dirname(albumInfo.icon.album.relativePath), path.sep).replace(/^\/+/, '') })
+            .andWhere('directory.path = :dirPath', { dirPath: path.join(path.relative('/', path.dirname(albumInfo.icon.album.relativePath)), path.sep) })
             .limit(1)
             .getOne();
-        extension.Logger.silly('getCoverForDirectory.before3: ', util.inspect(coverMedia));
+        extensionLog.debug(() => `getCoverForDirectory.before: coverMedia = ${util.inspect(coverMedia)}`);
         if (coverMedia != null) {
             event.stopPropagation = true;
             return coverMedia;
         }
         return input;
     });
-    extension.events.gallery.CoverManager
-        .getCoverForDirectory.after(async (output) => {
-        extension.Logger.silly('getCoverForDirectory.after: ', JSON.stringify(output, undefined, 2));
-        return output;
-    });
 };
 exports.init = init;
 const cleanUp = async (extension) => {
     extension.Logger.debug('Cleaning up');
-    // FIXME: probably need to reset digiKam data source
+    await digikamDB.cleanUp();
     /*
     * No need to clean up changed through extension.db,  extension.RESTApi or extension.events
     * */

@@ -1,5 +1,5 @@
 {
-  "name": "pigallery2-digikam-gasket-extension",
+  "name": "pigallery2-extension-digikam-connector",
   "version": "1.0.0",
   "license": "MIT",
   "dependencies": {
