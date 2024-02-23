@@ -314,7 +314,7 @@ const init = async (extension) => {
     extension.events.gallery.CoverManager
         .getCoverForDirectory.before(async (input, event) => {
         extensionLog.debug(() => `getCoverForDirectory.before: input = ${util.inspect(input)}`);
-        const inputQuery = input.inputs[0];
+        const inputQuery = input[0];
         const albumPath = (inputQuery.path === './')
             ? path.join(path.sep, inputQuery.name)
             : path.join(path.sep, inputQuery.path, inputQuery.name);

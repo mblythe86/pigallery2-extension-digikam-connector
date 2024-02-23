@@ -8,6 +8,7 @@ import { type ParentDirectoryDTO } from './node_modules/pigallery2-extension-kit
 import { Config } from './node_modules/pigallery2-extension-kit/lib/common/config/private/Config'
 import { LogLevel } from './node_modules/pigallery2-extension-kit/lib/common/config/private/PrivateConfig'
 import { type DirectoryScanSettings } from './node_modules/pigallery2-extension-kit/lib/backend/model/fileaccess/DiskManager'
+import { type CoverPhotoDTOWithID } from './node_modules/pigallery2-extension-kit/lib/backend/model/database/CoverManager'
 
 // Importing packages that are available in the main app (listed in the packages.json in pigallery2)
 import { DataSource, type DataSourceOptions, type SelectQueryBuilder, Entity, PrimaryGeneratedColumn, Column, Brackets, ManyToOne, OneToMany, JoinColumn, Relation } from 'typeorm'
@@ -284,9 +285,9 @@ export const init = async (extension: IExtensionObject<DigikamGasketConfig>): Pr
    * Select covers specified in DigiKam (if present)
    * */
   extension.events.gallery.CoverManager
-    .getCoverForDirectory.before(async (input: any, event) => { // FIXME: the input type is wrong?
+    .getCoverForDirectory.before(async (input: [{ id: number, name: string, path: string }], event): Promise<CoverPhotoDTOWithID | [{ id: number, name: string, path: string }]> => {
       extensionLog.debug(() => `getCoverForDirectory.before: input = ${util.inspect(input)}`)
-      const inputQuery = input.inputs[0]
+      const inputQuery = input[0]
       const albumPath = (inputQuery.path === './')
         ? path.join(path.sep, inputQuery.name)
         : path.join(path.sep, inputQuery.path, inputQuery.name)
@@ -317,7 +318,7 @@ export const init = async (extension: IExtensionObject<DigikamGasketConfig>): Pr
       extensionLog.debug(() => `getCoverForDirectory.before: coverMedia = ${util.inspect(coverMedia)}`)
       if (coverMedia != null) {
         event.stopPropagation = true
-        return coverMedia
+        return coverMedia as CoverPhotoDTOWithID
       }
       return input
     })
