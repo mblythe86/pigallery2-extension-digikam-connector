@@ -7,6 +7,7 @@ import { type ILogger } from './node_modules/pigallery2-extension-kit/lib/backen
 import { type ParentDirectoryDTO } from './node_modules/pigallery2-extension-kit/lib/common/entities/DirectoryDTO'
 import { Config } from './node_modules/pigallery2-extension-kit/lib/common/config/private/Config'
 import { LogLevel } from './node_modules/pigallery2-extension-kit/lib/common/config/private/PrivateConfig'
+import { type DirectoryScanSettings } from './node_modules/pigallery2-extension-kit/lib/backend/model/fileaccess/DiskManager'
 
 // Importing packages that are available in the main app (listed in the packages.json in pigallery2)
 import { DataSource, type DataSourceOptions, type SelectQueryBuilder, Entity, PrimaryGeneratedColumn, Column, Brackets, ManyToOne, OneToMany, JoinColumn, Relation } from 'typeorm'
@@ -262,21 +263,21 @@ export const init = async (extension: IExtensionObject<DigikamGasketConfig>): Pr
     return arr.filter((_v: boolean, index: number) => results[index])
   }
   extension.events.gallery.DiskManager
-    .scanDirectory.after(async (output: ParentDirectoryDTO) => {
-      extensionLog.debug(() => `scanDirectory.after: output = ${util.inspect(output)}`)
+    .scanDirectory.after(async (data: { input: [string, DirectoryScanSettings], output: ParentDirectoryDTO }) => {
+      extensionLog.debug(() => `scanDirectory.after: output = ${util.inspect(data.output)}`)
       // FIXME: this would be better accomplished by having an extension hook into DiskManager.excludeDir, but this works.
       // https://www.aleksandrhovhannisyan.com/blog/async-functions-that-return-booleans/
-      const dirs = await asyncFilter(output.directories, async (dir: any) => { const val = await indexDir(path.join(path.sep, dir.path, dir.name)); return val })
-      output.directories = dirs
+      const dirs = await asyncFilter(data.output.directories, async (dir: any) => { const val = await indexDir(path.join(path.sep, dir.path, dir.name)); return val })
+      data.output.directories = dirs
 
       // Also, don't show any photos in this directory if it's not the right collection
-      const showPics = await showDirPics(path.join(path.sep, output.path, output.name))
+      const showPics = await showDirPics(path.join(path.sep, data.output.path, data.output.name))
       if (!showPics) {
         extensionLog.silly(() => 'Do not show pics in this directory!')
-        output.media = []
+        data.output.media = []
       }
-      extensionLog.debug(() => `scanDirectory.after: altered output = ${util.inspect(output)}`)
-      return output
+      extensionLog.debug(() => `scanDirectory.after: altered output = ${util.inspect(data.output)}`)
+      return data.output
     })
 
   /**

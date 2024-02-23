@@ -293,20 +293,20 @@ const init = async (extension) => {
         return arr.filter((_v, index) => results[index]);
     };
     extension.events.gallery.DiskManager
-        .scanDirectory.after(async (output) => {
-        extensionLog.debug(() => `scanDirectory.after: output = ${util.inspect(output)}`);
+        .scanDirectory.after(async (data) => {
+        extensionLog.debug(() => `scanDirectory.after: output = ${util.inspect(data.output)}`);
         // FIXME: this would be better accomplished by having an extension hook into DiskManager.excludeDir, but this works.
         // https://www.aleksandrhovhannisyan.com/blog/async-functions-that-return-booleans/
-        const dirs = await asyncFilter(output.directories, async (dir) => { const val = await indexDir(path.join(path.sep, dir.path, dir.name)); return val; });
-        output.directories = dirs;
+        const dirs = await asyncFilter(data.output.directories, async (dir) => { const val = await indexDir(path.join(path.sep, dir.path, dir.name)); return val; });
+        data.output.directories = dirs;
         // Also, don't show any photos in this directory if it's not the right collection
-        const showPics = await showDirPics(path.join(path.sep, output.path, output.name));
+        const showPics = await showDirPics(path.join(path.sep, data.output.path, data.output.name));
         if (!showPics) {
             extensionLog.silly(() => 'Do not show pics in this directory!');
-            output.media = [];
+            data.output.media = [];
         }
-        extensionLog.debug(() => `scanDirectory.after: altered output = ${util.inspect(output)}`);
-        return output;
+        extensionLog.debug(() => `scanDirectory.after: altered output = ${util.inspect(data.output)}`);
+        return data.output;
     });
     /**
      * Select covers specified in DigiKam (if present)
